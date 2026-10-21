@@ -1,0 +1,587 @@
+# Subset of the monday.com API schema, version 2026-07.
+# Source: https://api.monday.com/v2/get_schema?version=2026-07&format=sdl
+# Only the types and fields this workflow uses are kept. Every kept definition is unchanged,
+# so the mock API in e2e_mock_test.py accepts and rejects queries the same way monday.com does.
+# Regenerate it from the full schema when you move to a newer API version.
+
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+"A monday.com board."
+type Board {
+  "The unique identifier of the board."
+  id: ID!
+  "The board's items (rows)."
+  items_page(
+    """
+    An opaque token representing the position in the result set from which to
+    resume fetching items. Use this to paginate through large result sets.
+    """
+    cursor: String
+    "The hierarchy config to use for the query filters."
+    hierarchy_scope_config: String
+    """
+    The maximum number of items to fetch in a single request. Use this to
+    control the size of the result set and manage pagination. Maximum: 500.
+    """
+    limit: Int! = 25
+    """
+    A set of parameters to filter, sort, and control the scope of the items
+    query. Use this to customize the results based on specific criteria.
+    """
+    query_params: ItemsQuery
+  ): ItemsResponse!
+  "The board's name."
+  name: String!
+  "The board's state (all / active / archived / deleted)."
+  state: State!
+  "The Board's url"
+  url: String!
+  "The board's visible columns."
+  columns(
+    "A list of column unique identifiers."
+    ids: [String]
+    "A list of column types."
+    types: [ColumnType!]
+    "A list of column capabilities to filter by. Returns columns that have any of the specified capabilities. Use null in the array to represent columns with no capabilities (e.g., [null] for only columns without capabilities, [null, CALCULATED] for columns without capabilities or with calculated)."
+    capabilities: [ColumnCapability]
+  ): [Column]
+}
+
+"The board hierarchy type"
+enum BoardHierarchy {
+  classic
+  multi_level
+}
+
+"The board kinds available."
+enum BoardKind {
+  private
+  public
+  share
+}
+
+type BoardRelationValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "A string representing all the names of the linked items, separated by commas"
+  display_value: String!
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "Text representation of the column value. Note: Not all columns support textual value"
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+"Options to order by."
+enum BoardsOrderBy {
+  created_at
+  used_at
+}
+
+type Column {
+  "The unique identifier of the column."
+  id: ID!
+  "The column's title."
+  title: String!
+  "The column's type."
+  type: ColumnType!
+}
+
+"Capabilities supported by the API"
+enum ColumnCapability {
+  CALCULATED
+  VISIBILITY
+}
+
+"Types of columns supported by the API"
+enum ColumnType {
+  auto_number
+  board_relation
+  button
+  checkbox
+  color_picker
+  country
+  creation_log
+  date
+  dependency
+  direct_doc
+  doc
+  dropdown
+  email
+  file
+  formula
+  group
+  hour
+  integration
+  item_assignees
+  item_id
+  last_updated
+  link
+  location
+  long_text
+  mirror
+  name
+  numbers
+  people
+  person
+  phone
+  progress
+  rating
+  status
+  subtasks
+  tags
+  team
+  text
+  time_tracking
+  timeline
+  unsupported
+  vote
+  week
+  world_clock
+}
+
+interface ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "Text representation of the column value. Note: Not all columns support textual value"
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+"A string or number value for comparison"
+scalar CompareValue
+
+"Complexity data."
+type Complexity {
+  "The remainder of complexity after the query's execution."
+  after: Int!
+  "The remainder of complexity before the query's execution."
+  before: Int!
+  "The specific query's complexity."
+  query: Int!
+  "How long in seconds before the complexity budget is reset"
+  reset_in_x_seconds: Int!
+}
+
+"A date."
+scalar Date
+
+type DateValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "The column's date value."
+  date: String
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "The formatted date and time in user time zone."
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+type DependencyValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "A string representing all the names of the linked items, separated by commas"
+  display_value: String!
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "Text representation of the column value. Note: Not all columns support textual value"
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+type EmailValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "The column's email value."
+  email: String
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "The column's text value. It can be the same as email when user didn't enter any text."
+  label: String
+  "Text representation of the column value. Note: Not all columns support textual value"
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+"An item (table row)."
+type Item {
+  "The item's unique identifier."
+  id: ID!
+  "The item's column values."
+  column_values(
+    "Capabilities supported by the API."
+    capabilities: [ColumnCapability!]
+    "A list of column ids to return"
+    ids: [String!]
+    "A list of column types to return"
+    types: [ColumnType!]
+  ): [ColumnValue!]!
+  "The item's create date."
+  created_at: Date
+  "The item's name."
+  name: String!
+  "The item's state (all / active / archived / deleted)."
+  state: State
+  "The item's last update date."
+  updated_at: Date
+  "The item's link"
+  url: String!
+}
+
+"The direction to order the items by"
+enum ItemsOrderByDirection {
+  asc
+  desc
+}
+
+input ItemsPageByColumnValuesQuery {
+  "The column's unique identifier."
+  column_id: String!
+  "The column values to search items by."
+  column_values: [String]!
+}
+
+input ItemsQuery {
+  "A list of rule groups"
+  groups: [ItemsQueryGroup!]
+  "A list of item IDs to fetch. Use this to fetch a specific set of items by their IDs. Limited to 100 IDs in ItemsQuery"
+  ids: [ID!]
+  "The operator to use for the query rules or rule groups. Default: AND"
+  operator: ItemsQueryOperator = and
+  "Sort the results by specified columns"
+  order_by: [ItemsQueryOrderBy!]
+  "A list of rules"
+  rules: [ItemsQueryRule!]
+}
+
+"A group of rules or rule groups"
+input ItemsQueryGroup {
+  "A list of rule groups"
+  groups: [ItemsQueryGroup!]
+  "The operator to use for the query rules or rule groups. Default: AND"
+  operator: ItemsQueryOperator = and
+  "A list of rules"
+  rules: [ItemsQueryRule!]
+}
+
+"The condition between the query rules"
+enum ItemsQueryOperator {
+  and
+  or
+}
+
+"Sort the results by specified columns"
+input ItemsQueryOrderBy {
+  column_id: String!
+  "Sort direction (defaults to ASC)"
+  direction: ItemsOrderByDirection = asc
+}
+
+"A rule to filter items by a specific column"
+input ItemsQueryRule {
+  column_id: ID!
+  compare_attribute: String
+  compare_value: CompareValue!
+  operator: ItemsQueryRuleOperator = any_of
+}
+
+"The operator to use for the value comparison"
+enum ItemsQueryRuleOperator {
+  any_of
+  between
+  contains_terms
+  contains_text
+  ends_with
+  greater_than
+  greater_than_or_equals
+  is_empty
+  is_not_empty
+  lower_than
+  lower_than_or_equal
+  not_any_of
+  not_contains_text
+  starts_with
+  within_the_last
+  within_the_next
+}
+
+type ItemsResponse {
+  """
+  An opaque cursor that represents the position in the list after the last
+  returned item. Use this cursor for pagination to fetch the next set of items.
+  If the cursor is null, there are no more items to fetch.
+  """
+  cursor: String
+  "The items associated with the cursor."
+  items: [Item!]!
+}
+
+"A JSON formatted string."
+scalar JSON
+
+"Kind of assignee"
+enum Kind {
+  agent
+  person
+  team
+}
+
+type LongTextValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "Text representation of the column value. Note: Not all columns support textual value"
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+type MirrorValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "A string representing all the names of the linked items, separated by commas"
+  display_value: String!
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "Text representation of the column value. Note: Not all columns support textual value"
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+"Root mutation type for the Dependencies service"
+type Mutation {
+  "Changes the column values of a specific item."
+  change_multiple_column_values(
+    "The board's unique identifier."
+    board_id: ID!
+    "The column values updates."
+    column_values: JSON!
+    "Create Status/Dropdown labels if they're missing. (Requires permission to change board structure)"
+    create_labels_if_missing: Boolean
+    "The item's unique identifier."
+    item_id: ID
+  ): Item
+  "Create a new item."
+  create_item(
+    "The board's unique identifier."
+    board_id: ID!
+    "The column values of the new item."
+    column_values: JSON
+    "Create Status/Dropdown labels if they're missing. (Requires permission to change board structure)"
+    create_labels_if_missing: Boolean
+    "The group's unique identifier."
+    group_id: String
+    "The new item's name."
+    item_name: String!
+    "The position relative method to another item (before_at / after_at)"
+    position_relative_method: PositionRelative
+    "The item to set the position next to."
+    relative_to: ID
+  ): Item
+}
+
+type NumbersValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "Number"
+  number: Float
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+type PeopleEntity {
+  "Id of the entity: a person or a team"
+  id: ID!
+  "Type of entity"
+  kind: Kind
+}
+
+type PeopleValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "The people and teams assigned to the item."
+  persons_and_teams: [PeopleEntity!]
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+type PhoneValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "ISO-2 country code"
+  country_short_name: String
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "Phone number"
+  phone: String
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+"The position relative method."
+enum PositionRelative {
+  after_at
+  before_at
+}
+
+"Root query type for the Dependencies service"
+type Query {
+  "Get a collection of boards."
+  boards(
+    "The board's kind (public / private / share)"
+    board_kind: BoardKind
+    "A list of hierarchy types"
+    hierarchy_types: [BoardHierarchy!]
+    "A list of boards unique identifiers."
+    ids: [ID!]
+    "Boolean that brings the latest data"
+    latest: Boolean
+    "Number of items to get, the default is 25."
+    limit: Int = 25
+    "Property to order by (created_at / used_at)."
+    order_by: BoardsOrderBy
+    "Page number to get, starting at 1."
+    page: Int = 1
+    "The state of the board (all / active / archived / deleted), the default is active."
+    state: State = active
+    "A list of workspace ids the boards are contained in."
+    workspace_ids: [ID]
+  ): [Board]
+  "Get the complexity data of your queries."
+  complexity: Complexity
+  "Search items by multiple columns and values."
+  items_page_by_column_values(
+    "The board's unique identifier."
+    board_id: ID!
+    "One or more columns, and their values to search items by."
+    columns: [ItemsPageByColumnValuesQuery!]
+    """
+    An opaque token representing the position in the result set from which to
+    resume fetching items. Use this to paginate through large result sets.
+    """
+    cursor: String
+    "The hierarchy config to use for the query filters."
+    hierarchy_scope_config: String
+    """
+    The maximum number of items to fetch in a single request. Use this to
+    control the size of the result set and manage pagination. Maximum: 500.
+    """
+    limit: Int! = 25
+  ): ItemsResponse!
+  "Get next pages of board's items (rows) by cursor."
+  next_items_page(
+    """
+    An opaque token representing the position in the result set from which to
+    resume fetching items. Use this to paginate through large result sets.
+    """
+    cursor: String!
+    """
+    The maximum number of items to fetch in a single request. Use this to
+    control the size of the result set and manage pagination. Maximum: 500.
+    """
+    limit: Int! = 25
+  ): ItemsResponse!
+}
+
+"The possible states for a board or item."
+enum State {
+  active
+  all
+  archived
+  deleted
+}
+
+type StatusValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "The column's unique identifier."
+  id: ID!
+  "The index of the status in the board"
+  index: Int
+  "Whether the status is done"
+  is_done: Boolean
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "The label of the status"
+  label: String
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}
+
+type TextValue implements ColumnValue {
+  "The column that this value belongs to."
+  column: Column!
+  "The column's unique identifier."
+  id: ID!
+  "Whether this item is a leaf (has no subitems)."
+  is_leaf: Boolean!
+  "The column's textual value"
+  text: String
+  "The column's type."
+  type: ColumnType!
+  "The column's raw value in JSON format."
+  value: JSON
+}

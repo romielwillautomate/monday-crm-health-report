@@ -1,0 +1,1413 @@
+{
+  "name": "Monday.com CRM Health Report",
+  "nodes": [
+    {
+      "id": "f3e727b5-a768-5d49-8358-662d8f4dfa2f",
+      "name": "Note: Triggers",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -60
+      ],
+      "parameters": {
+        "content": "## Start\nWeekly on **REPORT_CRON** (default Monday 08:00), or on demand with **Run Now**: a POST with the `X-Run-Secret` header. A wrong or missing secret gets 401 and an alert. Every setting is checked before any API call: Run Now gets 202 if they are fine, or 500 with the list of what to fix.",
+        "width": 1340,
+        "height": 700,
+        "color": 7
+      }
+    },
+    {
+      "id": "c977f9c9-93da-5d13-8720-9dada0f02e6d",
+      "name": "Note: Read",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        -60
+      ],
+      "parameters": {
+        "content": "## 1. Read every board\nPage by page: `items_page` first, then `next_items_page` with the cursor. Every answer is checked, because monday.com reports most errors with HTTP 200. Rate limits, the complexity budget, locked resources and 5xx answers wait as long as monday.com asks, then retry. A board that cannot be read in full is noted, never half scored, and the others still run.",
+        "width": 1220,
+        "height": 700,
+        "color": 5
+      }
+    },
+    {
+      "id": "d52b3492-c985-507e-a8c3-5f0b090003f6",
+      "name": "Note: Check",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2540,
+        -60
+      ],
+      "parameters": {
+        "content": "## 2. Check the data\nDuplicates, missing fields, stale items, missing owners, bad email or phone. Score = share of items with no issues.",
+        "width": 340,
+        "height": 700,
+        "color": 6
+      }
+    },
+    {
+      "id": "f4ef7854-6157-5f8d-82be-9608168f9e6d",
+      "name": "Note: Log",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        28,
+        740
+      ],
+      "parameters": {
+        "content": "## 3. CRM Health Log\nOne row per board per day, for trends. A re-run on the same day updates the rows it already wrote. The save carries an Idempotency-Key, so a retry after a lost answer never creates rows twice. A save that still fails is reported, and the next run fixes it.",
+        "width": 1312,
+        "height": 520,
+        "color": 4
+      }
+    },
+    {
+      "id": "6806d642-1ec5-5b1a-a90a-994a4eb3953c",
+      "name": "Note: Report",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        740
+      ],
+      "parameters": {
+        "content": "## 4. Send the report\nOne Slack message and an optional HTML email (Resend, with an idempotency key so a retry never sends twice). If a board, the log, Slack or the email failed, the run ends as failed and the error workflow sends the alert.",
+        "width": 1860,
+        "height": 520,
+        "color": 3
+      }
+    },
+    {
+      "id": "e1df0a45-40a8-52c2-8ab3-7986d1a38dbc",
+      "name": "Weekly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        60
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "={{ $env.REPORT_CRON || '0 8 * * 1' }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cb33a557-9bbf-5227-9ab2-7ee39a5e6fba",
+      "name": "Run Now",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "monday-crm-health-report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "ab159e61-b1d7-5561-ba4f-f153b4dc8773"
+    },
+    {
+      "id": "9c4f5416-992b-5cf8-8f43-83b455062dd7",
+      "name": "Run Now Authorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d60c81c0-bf2d-566c-8aec-40ee8a7e2615",
+              "leftValue": "={{ $env.RUN_NOW_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "7ecec409-4a27-55b9-8dea-6201aa54fa32",
+              "leftValue": "={{ $json.headers['x-run-secret'] }}",
+              "rightValue": "={{ $env.RUN_NOW_SECRET }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a47c392e-efc5-5020-9f76-64f24ada443b",
+      "name": "Respond: Started",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        40
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'started', message: 'The CRM health report is running. It arrives in Slack or email when every board is read.' }) }}",
+        "options": {
+          "responseCode": 202
+        }
+      }
+    },
+    {
+      "id": "e56200e9-06f1-5488-9c01-04713b81a808",
+      "name": "Respond: Bad Config",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        480
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'not started', message: 'The CRM health report did not start. Fix these settings first.', problems: $json.problems }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      }
+    },
+    {
+      "id": "b7798def-bd1b-5e58-9103-a5847ac14702",
+      "name": "Respond: Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        420,
+        480
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'unauthorized', message: 'Missing or wrong X-Run-Secret header.' }) }}",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "6387c7ec-f997-5f05-9755-de1ca6a6aa87",
+      "name": "Stop: Bad Run Now Secret",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        640,
+        480
+      ],
+      "parameters": {
+        "errorMessage": "Run Now call rejected: the X-Run-Secret header is missing or wrong, or RUN_NOW_SECRET is not set."
+      }
+    },
+    {
+      "id": "6b8660ba-0ac0-5848-af93-74acc0050ad0",
+      "name": "Load Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Reads every setting from the environment, checks it, and starts the page loop at the first board.\n// Secrets (API keys, the Slack URL) are not copied into the run data; the HTTP nodes read them from $env.\nconst problems = [];\nconst text = v => (v === undefined || v === null ? '' : String(v)).trim();\nconst whole = (name, raw, fallback, min, max) => {\n  const s = text(raw);\n  if (s === '') return fallback;\n  const n = Number(s);\n  if (!Number.isInteger(n) || n < min || n > max) {\n    problems.push(`${name} must be a whole number from ${min} to ${max} (it is \"${s}\")`);\n    return fallback;\n  }\n  return n;\n};\nconst columnId = v => (typeof v === 'string' && v.trim() ? v.trim() : null);\nconst EMAIL = /^[^\\s@<>]+@[^\\s@<>]+\\.[^\\s@<>]{2,}$/;\n\nif (!text($env.MONDAY_API_TOKEN)) problems.push('MONDAY_API_TOKEN is empty');\nconst apiVersion = text($env.MONDAY_API_VERSION) || '2026-07';\nif (!/^\\d{4}-\\d{2}$/.test(apiVersion)) problems.push(`MONDAY_API_VERSION must look like 2026-07 (it is \"${apiVersion}\")`);\n\n// BOARDS_JSON: one entry per board to check\nlet raw = [];\ntry {\n  raw = JSON.parse(text($env.BOARDS_JSON) || '[]');\n  if (!Array.isArray(raw) || raw.length === 0) {\n    problems.push('BOARDS_JSON must be a JSON list with at least one board');\n    raw = [];\n  }\n} catch (e) {\n  problems.push('BOARDS_JSON is not valid JSON: ' + e.message);\n}\nconst seen = new Set();\nconst boards = raw.map((b, i) => {\n  const where = `BOARDS_JSON board ${i + 1}`;\n  if (!b || typeof b !== 'object' || Array.isArray(b)) {\n    problems.push(`${where} is not an object`);\n    return null;\n  }\n  const id = text(b.id);\n  if (!/^\\d+$/.test(id)) problems.push(`${where}: \"id\" must be the numeric board ID from the board URL`);\n  else if (seen.has(id)) problems.push(`${where}: board ${id} is listed twice`);\n  seen.add(id);\n  const required = b.required_columns === undefined ? [] : b.required_columns;\n  if (!Array.isArray(required) || required.some(c => !columnId(c))) problems.push(`${where}: \"required_columns\" must be a list of column IDs`);\n  const done = b.done_labels === undefined ? [] : b.done_labels;\n  if (!Array.isArray(done) || done.some(l => typeof l !== 'string')) problems.push(`${where}: \"done_labels\" must be a list of status labels`);\n  for (const key of ['email_column', 'phone_column', 'status_column', 'owner_column']) {\n    if (b[key] !== undefined && b[key] !== null && !columnId(b[key])) problems.push(`${where}: \"${key}\" must be a column ID or null`);\n  }\n  const board = {\n    id,\n    name: text(b.name),\n    requiredColumns: Array.isArray(required) ? [...new Set(required.map(columnId).filter(Boolean))] : [],\n    emailColumn: columnId(b.email_column),\n    phoneColumn: columnId(b.phone_column),\n    statusColumn: columnId(b.status_column),\n    ownerColumn: columnId(b.owner_column),\n    doneLabels: Array.isArray(done) ? done.map(l => String(l).trim().toLowerCase()).filter(Boolean) : [],\n  };\n  board.columnIds = [...new Set([...board.requiredColumns, board.emailColumn, board.phoneColumn, board.statusColumn, board.ownerColumn].filter(Boolean))];\n  if (!board.columnIds.length) problems.push(`${where}: name at least one column to check`);\n  return board;\n}).filter(Boolean);\n\n// Delivery: Slack, email, or both\nconst slack = text($env.SLACK_WEBHOOK_URL) !== '';\nconst emailTo = text($env.REPORT_EMAIL_TO).split(',').map(s => s.trim()).filter(Boolean);\nif (emailTo.length) {\n  if (!text($env.RESEND_API_KEY)) problems.push('REPORT_EMAIL_TO is set but RESEND_API_KEY is empty');\n  if (!text($env.REPORT_EMAIL_FROM)) problems.push('REPORT_EMAIL_TO is set but REPORT_EMAIL_FROM is empty');\n  if (emailTo.length > 50) problems.push('REPORT_EMAIL_TO can have at most 50 addresses');\n  const bad = emailTo.filter(e => !EMAIL.test(e));\n  if (bad.length) problems.push('REPORT_EMAIL_TO has invalid address(es): ' + bad.join(', '));\n}\nif (!slack && !emailTo.length) problems.push('Set SLACK_WEBHOOK_URL or REPORT_EMAIL_TO, otherwise nobody receives the report');\n\n// Optional trend log on a monday.com board\nconst LOG_KEYS = ['key', 'date', 'board', 'score', 'items', 'issues', 'duplicates', 'missing', 'stale', 'no_owner', 'invalid'];\nlet log = null;\nconst logBoardId = text($env.HEALTH_LOG_BOARD_ID);\nif (logBoardId) {\n  if (!/^\\d+$/.test(logBoardId)) problems.push('HEALTH_LOG_BOARD_ID must be the numeric board ID');\n  let columns = {};\n  try {\n    columns = JSON.parse(text($env.HEALTH_LOG_COLUMNS) || '{}');\n    if (!columns || typeof columns !== 'object' || Array.isArray(columns)) throw new Error('it must be a JSON object');\n  } catch (e) {\n    problems.push('HEALTH_LOG_COLUMNS is not valid: ' + e.message);\n    columns = {};\n  }\n  const unknown = Object.keys(columns).filter(k => !LOG_KEYS.includes(k));\n  if (unknown.length) problems.push(`HEALTH_LOG_COLUMNS has unknown key(s): ${unknown.join(', ')}. Allowed: ${LOG_KEYS.join(', ')}`);\n  if (!columnId(columns.key)) problems.push('HEALTH_LOG_COLUMNS needs \"key\": the ID of a text column. It is how a re-run finds the row it already wrote');\n  log = { boardId: logBoardId, groupId: text($env.HEALTH_LOG_GROUP_ID) || null, columns: Object.fromEntries(Object.entries(columns).filter(([k, v]) => LOG_KEYS.includes(k) && columnId(v)).map(([k, v]) => [k, v.trim()])) };\n}\n\nconst timezone = text($env.REPORT_TIMEZONE) || $now.zoneName;\nconst local = $now.setZone(timezone);\nif (!local.isValid) problems.push(`REPORT_TIMEZONE \"${timezone}\" is not a valid time zone, for example America/New_York`);\nconst countryCode = text($env.PHONE_DEFAULT_COUNTRY_CODE) || '1';\nif (!/^\\d{1,3}$/.test(countryCode)) problems.push('PHONE_DEFAULT_COUNTRY_CODE must be 1 to 3 digits, for example 1 or 44');\n\nconst config = {\n  apiVersion,\n  boards,\n  staleDays: whole('STALE_DAYS', $env.STALE_DAYS, 30, 1, 3650),\n  pageSize: whole('MONDAY_PAGE_SIZE', $env.MONDAY_PAGE_SIZE, 100, 1, 500),\n  maxPages: whole('MONDAY_MAX_PAGES', $env.MONDAY_MAX_PAGES, 200, 1, 10000),\n  maxTries: whole('MONDAY_MAX_TRIES', $env.MONDAY_MAX_TRIES, 3, 1, 10),\n  maxWaitSeconds: whole('MONDAY_MAX_WAIT_SECONDS', $env.MONDAY_MAX_WAIT_SECONDS, 60, 1, 600),\n  topOffenders: whole('TOP_OFFENDERS', $env.TOP_OFFENDERS, 5, 0, 25),\n  countryCode,\n  timezone,\n  slack,\n  emailTo,\n  log,\n};\n\nreturn [{\n  json: {\n    ok: problems.length === 0,\n    problems,\n    trigger: $('Run Now').isExecuted ? 'Run Now' : 'schedule',\n    startedAt: $now.toUTC().toISO(),\n    snapshotDate: local.isValid ? local.toFormat('yyyy-MM-dd') : '',\n    config,\n    next: { boardIndex: 0, cursor: null, page: 0, attempt: 1 },\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "97510ac0-7d74-51e2-8f7f-03b643be2501",
+      "name": "Config Valid?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        640,
+        200
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "161c431b-8bef-5e0a-bb0c-e6f881916a8f",
+                    "leftValue": "={{ $json.ok }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  },
+                  {
+                    "id": "0405cdc7-4d14-5bc3-ba8b-6c69dda1c08c",
+                    "leftValue": "={{ $json.trigger }}",
+                    "rightValue": "Run Now",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ok, Run Now"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5a2b0624-1f66-5198-b8b7-7737f6f84cb4",
+                    "leftValue": "={{ $json.ok }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  },
+                  {
+                    "id": "cb654776-733d-56f4-ad8f-4a19b2d468c6",
+                    "leftValue": "={{ $json.trigger }}",
+                    "rightValue": "schedule",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ok, schedule"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a6448c89-25bf-56e1-bdab-0c09eecfcd6f",
+                    "leftValue": "={{ $json.ok }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  },
+                  {
+                    "id": "bf759fca-07dd-59c3-b8cc-7d98f8a1dc0f",
+                    "leftValue": "={{ $json.trigger }}",
+                    "rightValue": "schedule",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "bad, schedule"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ae26eaf0-d4e7-53c4-b83a-123dc1f9e8f8",
+                    "leftValue": "={{ $json.ok }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  },
+                  {
+                    "id": "1a82f01d-9e0d-58f2-87c9-ac343aff1534",
+                    "leftValue": "={{ $json.trigger }}",
+                    "rightValue": "Run Now",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "bad, Run Now"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "79a11891-a890-5098-aa2e-1ca66368a6da",
+      "name": "Stop: Bad Config",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        360
+      ],
+      "parameters": {
+        "errorMessage": "={{ 'The CRM health report did not run. Fix these settings: ' + $json.problems.join('; ') }}"
+      }
+    },
+    {
+      "id": "7ecaa7c6-d041-5323-9c78-4d0f6c28b045",
+      "name": "Build Page Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Builds the GraphQL request for the next page of the current board.\n// Page 1 uses boards { items_page }, which also returns the board name and checks the column IDs.\n// Every later page uses next_items_page with the cursor from the page before (cursors last 60 minutes).\nconst cfg = $('Load Config').first().json.config;\nconst state = $input.first().json.next;\nconst board = cfg.boards[state.boardIndex];\n\n// Email and phone come from their typed fields. Mirror, connect boards and dependency columns return no text,\n// only display_value, so those are asked for too.\nconst ITEMS = `items {\n      id name url created_at updated_at\n      column_values(ids: $columnIds) {\n        id type text\n        ... on EmailValue { email }\n        ... on PhoneValue { phone }\n        ... on MirrorValue { display_value }\n        ... on BoardRelationValue { display_value }\n        ... on DependencyValue { display_value }\n      }\n    }`;\nconst COMPLEXITY = 'complexity { query after reset_in_x_seconds }';\n\nlet query;\nlet variables;\nif (!state.cursor) {\n  query = `query FirstPage($boardIds: [ID!], $columnIds: [String!], $limit: Int!) {\n  ${COMPLEXITY}\n  boards(ids: $boardIds) {\n    id name url\n    columns(ids: $columnIds) { id title type }\n    items_page(limit: $limit) {\n      cursor\n      ${ITEMS.replace(/\\n/g, '\\n  ')}\n    }\n  }\n}`;\n  variables = { boardIds: [board.id], columnIds: board.columnIds, limit: cfg.pageSize };\n} else {\n  query = `query NextPage($cursor: String!, $columnIds: [String!], $limit: Int!) {\n  ${COMPLEXITY}\n  next_items_page(cursor: $cursor, limit: $limit) {\n    cursor\n    ${ITEMS}\n  }\n}`;\n  variables = { cursor: state.cursor, columnIds: board.columnIds, limit: cfg.pageSize };\n}\n\nreturn [{ json: { ...state, boardId: board.id, request: { query, variables } } }];\n"
+      }
+    },
+    {
+      "id": "376bae9c-8ff6-55a8-8f3b-0df41c0e5043",
+      "name": "Monday: Fetch Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.MONDAY_API_TOKEN }}"
+            },
+            {
+              "name": "API-Version",
+              "value": "={{ $('Load Config').first().json.config.apiVersion }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "d75932ba-bb7a-5dff-8ab3-0eb2abf4d16e",
+      "name": "Check Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Reads monday.com's answer for one page, keeps the items, and picks the next step:\n//   next   read the next page, or the first page of the next board\n//   wait   pause, then go on (rate limit, complexity budget, a locked resource, or a 5xx answer)\n//   done   every board is read\n//   fatal  stop the run (bad token, daily limit, an API version or user monday.com refuses, or monday.com still\n//          failing after MONDAY_MAX_TRIES)\n// monday.com reports most errors with HTTP 200 and an \"errors\" list, so the status code alone is not enough.\n// A problem with one board (deleted, no access, wrong column ID) is recorded and the other boards still run.\nconst cfg = $('Load Config').first().json.config;\nconst req = $('Build Page Request').first().json;\nconst res = $input.first().json;\nconst board = cfg.boards[req.boardIndex];\nconst status = Number(res.statusCode) || 0;\n\nlet body = res.body;\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch (e) { body = { errors: [{ message: body.slice(0, 200) || 'empty answer' }] }; }\n}\nif (!body || typeof body !== 'object') body = {};\n// Current API versions return { errors: [...] }; very old ones returned { error_code, error_message }\nconst errors = Array.isArray(body.errors) ? body.errors\n  : body.error_message ? [{ message: body.error_message, extensions: { code: body.error_code } }] : [];\nconst codes = errors.map(e => String((e && e.extensions && e.extensions.code) || ''));\nconst firstError = errors.length ? `${codes[0] ? codes[0] + ': ' : ''}${errors[0].message || 'unknown error'}` : '';\n\nconst RETRY = ['COMPLEXITY_BUDGET_EXHAUSTED', 'ComplexityException', 'RATE_LIMIT_EXCEEDED', 'IP_RATE_LIMIT_EXCEEDED',\n  'CONCURRENCY_LIMIT_EXCEEDED', 'maxConcurrencyExceeded', 'API_TEMPORARILY_BLOCKED', 'INTERNAL_SERVER_ERROR'];\nconst waitFor = seconds => Math.max(1, Math.min(cfg.maxWaitSeconds, Math.ceil(seconds)));\n\nconst base = { boardIndex: req.boardIndex, boardId: board.id, page: req.page, attempt: req.attempt, checkRun: $runIndex, records: [] };\nconst emit = fields => [{ json: { ...base, ...fields } }];\nconst afterBoard = fields => (req.boardIndex + 1 < cfg.boards.length\n  ? { ...fields, route: 'next', next: { boardIndex: req.boardIndex + 1, cursor: null, page: 0, attempt: 1 } }\n  : { ...fields, route: 'done' });\nconst boardFailed = reason => emit(afterBoard({ boardError: reason }));\n\n// 1. Problems that would hit every board: stop the run\nif (status === 401) {\n  return emit({ route: 'fatal', fatalError: 'monday.com rejected the API token (HTTP 401). Check MONDAY_API_TOKEN, and the IP restrictions if your account uses them. No report was sent.' });\n}\nif (codes.includes('DAILY_LIMIT_EXCEEDED')) {\n  return emit({ route: 'fatal', fatalError: `monday.com daily API call limit reached (${firstError}). No report was sent; it runs again on the next schedule.` });\n}\nif (codes.includes('InvalidVersionException')) {\n  return emit({ route: 'fatal', fatalError: `monday.com does not accept API version ${cfg.apiVersion} (${firstError}). Set MONDAY_API_VERSION to a supported version, for example 2026-07. No report was sent.` });\n}\nif (codes.includes('USER_ACCESS_DENIED')) {\n  return emit({ route: 'fatal', fatalError: `monday.com does not let the API token's user use the API (HTTP ${status}, ${firstError}). The user must be active, not a viewer, with a confirmed email. No report was sent.` });\n}\n// One page costs more than the 5M complexity points a single query may use. Waiting does not help; a smaller page does\nif (codes.includes('REQUEST_MAX_COMPLEXITY_EXCEEDED') || codes.includes('maxComplexityExceeded')) {\n  return boardFailed(`${firstError}. One page is too expensive, lower MONDAY_PAGE_SIZE (now ${cfg.pageSize})`);\n}\n\n// 2. Temporary problems: wait and try the same request again.\n//    429 rate limits, 423 \"resource is currently locked\", 5xx, and the retryable codes above (some come with HTTP 200)\nif (status === 429 || status === 423 || status >= 500 || codes.some(c => RETRY.includes(c))) {\n  const reason = `HTTP ${status}${firstError ? ', ' + firstError : ''}`;\n  if (req.attempt >= cfg.maxTries) {\n    return emit({ route: 'fatal', fatalError: `monday.com still failing after ${req.attempt} tries (${reason}) while reading board ${board.name || board.id}. No report was sent.` });\n  }\n  // monday.com says how long to wait in retry_in_seconds (body) or Retry-After (header); otherwise back off 10s, 20s, 40s\n  const fromBody = errors.map(e => Number(e && e.extensions && e.extensions.retry_in_seconds)).find(n => n > 0);\n  const fromHeader = Number((res.headers || {})['retry-after']);\n  const asked = fromBody || (fromHeader > 0 ? fromHeader : 2 ** req.attempt * 5);\n  return emit({ route: 'wait', waitSeconds: waitFor(asked), askedSeconds: asked,\n    waitSource: fromBody ? 'retry_in_seconds' : fromHeader > 0 ? 'Retry-After' : 'backoff', waitReason: reason,\n    next: { boardIndex: req.boardIndex, cursor: req.cursor, page: req.page, attempt: req.attempt + 1 } });\n}\n\n// 3. This board cannot be read: note it and move on\nif (status !== 200) return boardFailed(`HTTP ${status}${firstError ? ': ' + firstError : ''}`);\nif (errors.length) return boardFailed(firstError);\n\nconst data = body.data || {};\nlet page;\nlet boardMeta = null;\nif (req.page === 0) {\n  const found = (data.boards || [])[0];\n  if (!found) return boardFailed('board not found, archived, or the API token has no access to it');\n  const columns = new Map((found.columns || []).filter(Boolean).map(c => [c.id, c]));\n  const missing = board.columnIds.filter(id => !columns.has(id));\n  if (missing.length) return boardFailed(`column ID(s) not on this board: ${missing.join(', ')}. Fix BOARDS_JSON`);\n  // monday.com returns no text for formula columns (and their display_value is heavily rate limited), so every\n  // item would look like it is missing the value. Say so instead of reporting a misleading score.\n  const formula = board.columnIds.filter(id => columns.get(id).type === 'formula');\n  if (formula.length) return boardFailed(`formula column(s) cannot be checked: ${formula.join(', ')}. Remove them from BOARDS_JSON`);\n  boardMeta = {\n    name: found.name,\n    url: found.url,\n    columns: Object.fromEntries([...columns].map(([id, c]) => [id, { title: c.title, type: c.type }])),\n  };\n  page = found.items_page;\n} else {\n  page = data.next_items_page;\n}\nif (!page || !Array.isArray(page.items)) return boardFailed('monday.com answered without an items page');\n\n// Keep only what the checks need: email and phone from their typed fields, linked columns from display_value,\n// everything else from the text\nconst records = page.items.map(item => {\n  const v = {};\n  for (const cv of item.column_values || []) {\n    if (!cv || !cv.id) continue;\n    const value = cv.type === 'email' ? cv.email : cv.type === 'phone' ? cv.phone\n      : 'display_value' in cv ? cv.display_value : cv.text;\n    v[cv.id] = value === null || value === undefined ? '' : String(value).trim();\n  }\n  return { id: String(item.id), name: item.name, url: item.url, createdAt: item.created_at, updatedAt: item.updated_at, v };\n});\nconst kept = { records, boardMeta, itemsOnPage: records.length };\n\nlet step;\nif (page.cursor) {\n  if (page.cursor === req.cursor) return emit(afterBoard({ ...kept, boardError: 'monday.com returned the same cursor twice, so reading stopped' }));\n  if (req.page + 1 >= cfg.maxPages) return emit(afterBoard({ ...kept, boardError: `stopped after ${cfg.maxPages} pages (MONDAY_MAX_PAGES); the board has more items` }));\n  step = { ...kept, route: 'next', next: { boardIndex: req.boardIndex, cursor: page.cursor, page: req.page + 1, attempt: 1 } };\n} else {\n  step = afterBoard(kept);\n}\n\n// Not enough complexity budget left for another request like this one: wait for the reset first\nconst cx = data.complexity;\nif (step.route === 'next' && cx && Number.isFinite(Number(cx.after)) && Number(cx.after) < Number(cx.query)) {\n  const asked = (Number(cx.reset_in_x_seconds) || 60) + 1;\n  step = { ...step, route: 'wait', waitSeconds: waitFor(asked), askedSeconds: asked, waitSource: 'complexity',\n    waitReason: `complexity budget low (${cx.after} left, one page costs ${cx.query})` };\n}\nreturn emit(step);\n"
+      }
+    },
+    {
+      "id": "629dfede-ff46-5f86-a60a-e6ef3ead7fff",
+      "name": "Next Step",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2060,
+        200
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1d6b34da-dc73-566a-9004-58abdf0783a5",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "next",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "next page"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7c6a8af8-0e33-5f74-802c-6fbc02ba0a53",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "wait",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "wait"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "68e40fd5-461c-5fa1-8ec6-5743fda435ad",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "done",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "all read"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "abcea2d7-4a74-5446-acf3-9c87ca130daa",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "fatal",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "stop"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ce0f10b1-6350-5040-a1e6-760ca7b0d2b5",
+      "name": "Wait: Back Off",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1840,
+        420
+      ],
+      "parameters": {
+        "amount": "={{ $json.waitSeconds }}",
+        "unit": "seconds"
+      },
+      "webhookId": "b507cfdd-1a95-58aa-ba9f-8a599042c22b"
+    },
+    {
+      "id": "589437c7-7f83-5100-9c2f-490bdb41c5cc",
+      "name": "Stop: Monday Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        2280,
+        420
+      ],
+      "parameters": {
+        "errorMessage": "={{ $json.fatalError || ('Could not reach monday.com after 3 tries: ' + (($json.error && $json.error.message) || 'no answer') + '. No report was sent.') }}"
+      }
+    },
+    {
+      "id": "b18bf17f-8d87-5aac-ac18-8b44dcfc060a",
+      "name": "Analyze Boards",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        460
+      ],
+      "parameters": {
+        "jsCode": "// Collects every page that \"Check Page\" kept (one run per page) and runs the checks per board:\n//   duplicates      items that share a valid email (case and spaces ignored) or a valid phone number (digits only)\n//                   with an older item. The oldest item in each group is the original; the rest count.\n//   missing fields  items with at least one empty required column\n//   stale           not in a done status and no update for more than STALE_DAYS days (item updated_at)\n//   no owner        empty owner column\n//   invalid format  email or phone present but not valid\n// Health score = share of items with no issues, from 0 to 100: round(100 x clean items / all items).\nconst start = $('Load Config').first().json;\nconst cfg = start.config;\nconst now = Date.parse(start.startedAt);\nconst DAY = 86400000;\n\n// 1. Gather the pages of each board from every run of \"Check Page\"\nconst boards = cfg.boards.map(b => ({ cfg: b, meta: null, error: null, records: [], pages: 0 }));\nconst lastRun = $input.first().json.checkRun;\nfor (let run = 0; run <= lastRun; run++) {\n  const page = $('Check Page').all(0, run)[0].json;\n  const target = boards[page.boardIndex];\n  if (page.boardMeta) target.meta = page.boardMeta;\n  if (page.itemsOnPage !== undefined) {\n    target.pages += 1;\n    for (const r of page.records) target.records.push(r);\n  }\n  if (page.boardError) target.error = page.boardError;\n}\n\n// 2. Value checks\nconst EMAIL = /^[^\\s@<>]+@[^\\s@<>]+\\.[^\\s@<>]{2,}$/;\nconst phoneKey = raw => {\n  const s = raw.trim();\n  if (/[a-z]/i.test(s)) return null;\n  let d = s.replace(/\\D/g, '');\n  if (s.startsWith('+')) {\n    // already international\n  } else if (d.startsWith('00')) {\n    d = d.slice(2);\n  } else if (!(d.startsWith(cfg.countryCode) && d.length >= 11)) {\n    d = cfg.countryCode + d.replace(/^0/, '');\n  }\n  return d.length >= 8 && d.length <= 15 ? d : null;\n};\nconst plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;\n\nconst results = boards.map(({ cfg: b, meta, error, records, pages }) => {\n  const name = b.name || (meta && meta.name) || `Board ${b.id}`;\n  const out = { id: b.id, name, url: meta ? meta.url : '', pages };\n  if (error) return { ...out, status: 'failed', error, score: null, grade: 'not checked' };\n  const title = id => (meta.columns[id] && meta.columns[id].title) || id;\n  const checks = { duplicates: !!(b.emailColumn || b.phoneColumn), missing: b.requiredColumns.length > 0, stale: true,\n    owner: !!b.ownerColumn, format: !!(b.emailColumn || b.phoneColumn) };\n\n  const items = records.map(r => {\n    const val = id => (id && r.v[id] !== undefined ? r.v[id] : '');\n    const email = val(b.emailColumn);\n    const phone = val(b.phoneColumn);\n    const pk = phone ? phoneKey(phone) : null;\n    const status = val(b.statusColumn).toLowerCase();\n    const updated = Date.parse(r.updatedAt);\n    const age = Number.isFinite(updated) ? Math.floor((now - updated) / DAY) : null;\n    const done = !!b.statusColumn && status !== '' && b.doneLabels.includes(status);\n    // Only a valid email or phone can match a duplicate, so placeholders such as \"n/a\" or \"none\" in a text\n    // column never join unrelated items into one group (they count as invalid instead)\n    const emailOk = email !== '' && EMAIL.test(email);\n    return {\n      id: r.id, name: r.name || '(no name)', url: r.url, created: Date.parse(r.createdAt) || 0, age,\n      missing: b.requiredColumns.filter(id => !val(id)),\n      badEmail: !!b.emailColumn && email !== '' && !emailOk,\n      badPhone: !!b.phoneColumn && phone !== '' && !pk,\n      stale: !done && Number.isFinite(updated) && now - updated > cfg.staleDays * DAY,\n      noOwner: !!b.ownerColumn && !val(b.ownerColumn),\n      keys: [emailOk ? 'e:' + email.toLowerCase() : null, pk ? 'p:' + pk : null].filter(Boolean),\n      duplicateOf: null,\n    };\n  });\n\n  // Duplicates: join items that share any key (A and B share a phone, B and C an email: one group of 3)\n  const parent = items.map((_, i) => i);\n  const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };\n  const firstWithKey = new Map();\n  items.forEach((it, i) => {\n    for (const k of it.keys) {\n      if (firstWithKey.has(k)) parent[find(i)] = find(firstWithKey.get(k));\n      else firstWithKey.set(k, i);\n    }\n  });\n  const groups = new Map();\n  items.forEach((it, i) => { const root = find(i); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(it); });\n  let duplicateGroups = 0;\n  for (const group of groups.values()) {\n    if (group.length < 2) continue;\n    duplicateGroups += 1;\n    group.sort((x, y) => x.created - y.created || Number(x.id) - Number(y.id));\n    for (const it of group.slice(1)) it.duplicateOf = group[0];\n  }\n\n  const missingByField = {};\n  for (const it of items) {\n    for (const id of it.missing) missingByField[title(id)] = (missingByField[title(id)] || 0) + 1;\n    it.issues = [];\n    if (it.duplicateOf) it.issues.push(`duplicate of ${it.duplicateOf.name}`);\n    if (it.missing.length) it.issues.push('missing ' + it.missing.map(title).join(', '));\n    if (it.stale) it.issues.push(`no update in ${it.age} days`);\n    if (it.noOwner) it.issues.push('no owner');\n    if (it.badEmail) it.issues.push('invalid email');\n    if (it.badPhone) it.issues.push('invalid phone');\n    it.issueCount = (it.duplicateOf ? 1 : 0) + it.missing.length + (it.stale ? 1 : 0) + (it.noOwner ? 1 : 0) + (it.badEmail ? 1 : 0) + (it.badPhone ? 1 : 0);\n  }\n\n  const total = items.length;\n  const withIssues = items.filter(it => it.issueCount > 0);\n  const counts = {\n    items: total,\n    issueItems: withIssues.length,\n    duplicates: items.filter(it => it.duplicateOf).length,\n    duplicateGroups,\n    missingRequired: items.filter(it => it.missing.length).length,\n    missingByField,\n    stale: items.filter(it => it.stale).length,\n    noOwner: items.filter(it => it.noOwner).length,\n    invalid: items.filter(it => it.badEmail || it.badPhone).length,\n    invalidEmail: items.filter(it => it.badEmail).length,\n    invalidPhone: items.filter(it => it.badPhone).length,\n  };\n  const score = total ? Math.round((100 * (total - withIssues.length)) / total) : null;\n  const grade = score === null ? 'empty' : score >= 90 ? 'Healthy' : score >= 75 ? 'Fair' : 'Needs attention';\n  // Worst items: most issues first, then the longest without an update, then the oldest ID\n  const offenders = withIssues\n    .sort((x, y) => y.issueCount - x.issueCount || (y.age || 0) - (x.age || 0) || Number(x.id) - Number(y.id))\n    .slice(0, cfg.topOffenders)\n    .map(it => ({ id: it.id, name: it.name, url: it.url, issueCount: it.issueCount, issues: it.issues }));\n  const summary = [\n    checks.duplicates && counts.duplicates ? plural(counts.duplicates, 'duplicate', 'duplicates') : null,\n    checks.missing && counts.missingRequired ? `${counts.missingRequired} missing required fields` : null,\n    counts.stale ? `${counts.stale} stale` : null,\n    checks.owner && counts.noOwner ? `${counts.noOwner} without an owner` : null,\n    checks.format && counts.invalid ? `${counts.invalid} with an invalid email or phone` : null,\n  ].filter(Boolean);\n  return { ...out, status: total ? 'ok' : 'empty', checks, counts, score, grade, summary, offenders };\n});\n\nconst checked = results.filter(r => r.status !== 'failed');\nreturn [{\n  json: {\n    snapshotDate: start.snapshotDate,\n    trigger: start.trigger,\n    staleDays: cfg.staleDays,\n    boards: results,\n    totals: {\n      boards: results.length,\n      checked: checked.length,\n      failed: results.length - checked.length,\n      items: checked.reduce((n, r) => n + r.counts.items, 0),\n      issueItems: checked.reduce((n, r) => n + r.counts.issueItems, 0),\n    },\n    logWanted: !!cfg.log && checked.length > 0,\n    log: { status: cfg.log ? (checked.length ? 'pending' : 'skipped') : 'off', rows: [] },\n    logLookup: cfg.log ? {\n      query: `query FindLogRows($board: ID!, $columns: [ItemsPageByColumnValuesQuery!], $keyColumn: [String!], $limit: Int!) {\n  items_page_by_column_values(board_id: $board, columns: $columns, limit: $limit) {\n    cursor\n    items { id name column_values(ids: $keyColumn) { id text } }\n  }\n}`,\n      variables: {\n        board: cfg.log.boardId,\n        columns: [{ column_id: cfg.log.columns.key, column_values: checked.map(r => `${start.snapshotDate}|${r.id}`) }],\n        keyColumn: [cfg.log.columns.key],\n        limit: 500,\n      },\n    } : null,\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "884ef46d-f580-5321-b0ca-8efd96fef32c",
+      "name": "Log Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        60,
+        1060
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c32b5417-4f72-5503-9786-60da4ddf2367",
+              "leftValue": "={{ $json.logWanted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0553b343-5fd5-5938-af01-351f5c1fb4f8",
+      "name": "Monday: Find Log Rows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        920
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.MONDAY_API_TOKEN }}"
+            },
+            {
+              "name": "API-Version",
+              "value": "={{ $('Load Config').first().json.config.apiVersion }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.logLookup) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "8a2c205b-9106-5fda-aa3a-322dea9944d9",
+      "name": "Plan Log Writes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        920
+      ],
+      "parameters": {
+        "jsCode": "// One row per board per day on the CRM Health Log board. The \"key\" column holds \"<date>|<board id>\".\n// Rows found by the lookup are updated, the rest are created, so running the report twice on the same day\n// never adds a second row. Everything goes out in one GraphQL request with one aliased mutation per board.\nconst a = $('Analyze Boards').first().json;\nconst log = $('Load Config').first().json.config.log;\nconst body = $input.first().json;\n\nif (Array.isArray(body.errors) && body.errors.length) {\n  const e = body.errors[0];\n  return [{ json: { ready: false, log: { status: 'failed', rows: [], error: `could not look up existing rows (${(e.extensions && e.extensions.code) || 'error'}: ${e.message})` } } }];\n}\nconst found = (body.data && body.data.items_page_by_column_values && body.data.items_page_by_column_values.items) || [];\nconst existing = new Map();\nfor (const item of found) {\n  const cell = (item.column_values || []).find(c => c && c.id === log.columns.key);\n  const key = cell && cell.text ? cell.text.trim().toLowerCase() : '';\n  if (key && !existing.has(key)) existing.set(key, String(item.id));\n}\n\nconst defs = ['$board: ID!'];\nconst fields = [];\nconst variables = { board: log.boardId };\n// GraphQL rejects a declared variable that no field uses, so $group is only declared when a row is created\nconst useGroup = () => {\n  if (!log.groupId) return '';\n  if (!('group' in variables)) {\n    defs.push('$group: String');\n    variables.group = log.groupId;\n  }\n  return ', group_id: $group';\n};\nconst rows = [];\na.boards.filter(b => b.status !== 'failed').forEach((b, i) => {\n  const key = `${a.snapshotDate}|${b.id}`;\n  const itemId = existing.get(key.toLowerCase());\n  const values = {};\n  const put = (name, value) => { if (log.columns[name]) values[log.columns[name]] = value; };\n  put('key', key);\n  put('date', { date: a.snapshotDate });\n  put('board', b.name);\n  // An empty board has no score. On an update, null clears a score written earlier the same day\n  // (monday.com turns an empty string into 0 for a numbers column)\n  if (b.score !== null) put('score', String(b.score));\n  else if (itemId) put('score', null);\n  put('items', String(b.counts.items));\n  put('issues', String(b.counts.issueItems));\n  if (b.checks.duplicates) put('duplicates', String(b.counts.duplicates));\n  if (b.checks.missing) put('missing', String(b.counts.missingRequired));\n  put('stale', String(b.counts.stale));\n  if (b.checks.owner) put('no_owner', String(b.counts.noOwner));\n  if (b.checks.format) put('invalid', String(b.counts.invalid));\n\n  const alias = `row${i}`;\n  variables[`values${i}`] = JSON.stringify(values);\n  if (itemId) {\n    defs.push(`$item${i}: ID!`, `$values${i}: JSON!`);\n    fields.push(`${alias}: change_multiple_column_values(board_id: $board, item_id: $item${i}, column_values: $values${i}) { id }`);\n    variables[`item${i}`] = itemId;\n    rows.push({ alias, boardId: b.id, board: b.name, key, action: 'update', itemId });\n  } else {\n    defs.push(`$name${i}: String!`, `$values${i}: JSON!`);\n    fields.push(`${alias}: create_item(board_id: $board${useGroup()}, item_name: $name${i}, column_values: $values${i}) { id }`);\n    variables[`name${i}`] = `${b.name.slice(0, 240)} ${a.snapshotDate}`;  // monday.com item names are 1 to 255 characters\n    rows.push({ alias, boardId: b.id, board: b.name, key, action: 'create', itemId: null });\n  }\n});\n\nreturn [{\n  json: {\n    ready: rows.length > 0,\n    log: { status: 'pending', rows },\n    request: { query: `mutation SaveHealthLog(${defs.join(', ')}) {\\n  ${fields.join('\\n  ')}\\n}`, variables },\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "0cbb488b-c1b9-5b0d-8959-0047f4c75eaf",
+      "name": "Ready To Save?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        920
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "8a93b254-f52f-5d41-bfd1-a0e387233a45",
+              "leftValue": "={{ $json.ready }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d69fd694-8fd7-5fd6-bef4-f932a88d9ff3",
+      "name": "Monday: Save Log Rows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        860
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.MONDAY_API_TOKEN }}"
+            },
+            {
+              "name": "API-Version",
+              "value": "={{ $('Load Config').first().json.config.apiVersion }}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'crm-health-log/' + $workflow.id + '/' + $('Analyze Boards').first().json.snapshotDate + '/' + $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "36ce49ce-a95e-52ba-897c-4cb001127eee",
+      "name": "Check Log Writes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        860
+      ],
+      "parameters": {
+        "jsCode": "// Matches each aliased mutation in the answer to its board. monday.com runs every mutation in the request\n// and reports a failed one in \"errors\" with the alias in \"path\", so one bad row does not hide the others.\nconst plan = $('Plan Log Writes').first().json;\nconst body = $input.first().json;\nconst errors = Array.isArray(body.errors) ? body.errors : [];\nconst general = errors.filter(e => !Array.isArray(e.path) || !e.path.length);\nconst describe = e => `${(e.extensions && e.extensions.code) || 'error'}: ${e.message}`;\n\nconst rows = plan.log.rows.map(r => {\n  const own = errors.find(e => Array.isArray(e.path) && e.path[0] === r.alias);\n  const saved = body.data && body.data[r.alias] && body.data[r.alias].id;\n  const problem = own || general[0];\n  return { ...r, ok: !problem && !!saved, itemId: saved ? String(saved) : r.itemId,\n    error: problem ? describe(problem) : saved ? null : 'monday.com returned no item ID' };\n});\nconst failed = rows.filter(r => !r.ok);\nreturn [{\n  json: {\n    log: {\n      status: !failed.length ? 'saved' : failed.length === rows.length ? 'failed' : 'partial',\n      created: rows.filter(r => r.ok && r.action === 'create').length,\n      updated: rows.filter(r => r.ok && r.action === 'update').length,\n      rows,\n      error: failed.map(r => `${r.board}: ${r.error}`).join('; '),\n    },\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "93885241-9128-5d6f-8397-bee835edb0a8",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        1060
+      ],
+      "parameters": {
+        "jsCode": "// Builds one Slack message and one HTML email from the analysis.\n// Item and board names come from the CRM, so they are escaped for Slack (& < >) and for HTML.\n// This node is reached from five places (log off, log saved, or one of three log failures); $json tells which.\nconst a = $('Analyze Boards').first().json;\nconst cfg = $('Load Config').first().json.config;\n\n// n8n words a failed request as '500 - \"<body as JSON text>\"'; turn that into \"HTTP 500: <message>\"\nconst readable = e => {\n  const m = /^(\\d{3}) - ([\\s\\S]*)$/.exec((e && e.message) || '');\n  if (!m) return (e && e.message) || 'request failed';\n  let body = m[2];\n  for (let i = 0; i < 2 && typeof body === 'string'; i++) { try { body = JSON.parse(body); } catch (x) { break; } }\n  const msg = typeof body === 'string' ? body : (body && ((body.errors && body.errors[0] && body.errors[0].message) || body.message || body.error)) || '';\n  return `HTTP ${m[1]}${msg ? ': ' + String(msg).slice(0, 200) : ''}`;\n};\nlet log = $json.log || { status: 'off', rows: [] };\nif ($json.error) log = { status: 'failed', rows: [], error: `monday.com did not accept the request (${readable($json.error)})` };\n\nconst esc = s => String(s === null || s === undefined ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst html = s => esc(s).replace(/\"/g, '&quot;');\nconst safeUrl = u => (typeof u === 'string' && /^https?:\\/\\/[^\\s<>|\"]+$/i.test(u) ? u : '');\nconst slackLink = (url, label) => (safeUrl(url) ? `<${safeUrl(url)}|${esc(label)}>` : esc(label));\nconst htmlLink = (url, label) => (safeUrl(url) ? `<a href=\"${html(safeUrl(url))}\" style=\"color:#1f5fbf\">${html(label)}</a>` : html(label));\nconst t = a.totals;\n\nconst logNote = {\n  off: '',\n  skipped: 'Health log: nothing to save.',\n  saved: `Health log: ${log.created || 0} new, ${log.updated || 0} updated.`,\n}[log.status];\nconst logProblem = ['failed', 'partial'].includes(log.status)\n  ? `Health log NOT ${log.status === 'partial' ? 'fully ' : ''}saved: ${log.error}. Run the report again; rows are matched by date and board, so nothing is duplicated.`\n  : '';\nconst legend = `Score = share of items with no issues. Stale = not done and no update for more than ${a.staleDays} days.`;\n\n// ---------- Slack ----------\nconst icon = b => (b.status === 'failed' ? ':warning:' : b.status === 'empty' ? ':white_circle:'\n  : b.score >= 90 ? ':large_green_circle:' : b.score >= 75 ? ':large_yellow_circle:' : ':red_circle:');\nconst boardText = b => {\n  const head = `${icon(b)} *${slackLink(b.url, b.name)}*`;\n  if (b.status === 'failed') return `${head}: could not be checked. ${esc(b.error)}`;\n  if (b.status === 'empty') return `${head}: empty board, nothing to check.`;\n  const lines = [`${head}: score *${b.score}/100* (${b.grade})`,\n    `${b.counts.items} items, ` + (b.counts.issueItems ? `${b.counts.issueItems} with issues: ${b.summary.join(', ')}.` : 'no issues found.')];\n  const worst = b.offenders.map(o => `• ${slackLink(o.url, o.name)}: ${esc(o.issues.join(', '))}`);\n  if (worst.length) lines.push('*Worst items*', ...worst);\n  // A section holds 3,000 characters: drop worst items from the end and say how many were left out\n  let cut = 0;\n  while (lines.join('\\n').length > 2850 && lines.length > 3) { lines.pop(); cut += 1; }\n  if (cut) lines.push(`and ${cut} more`);\n  return lines.join('\\n');\n};\nlet overview = `*${t.checked} of ${t.boards} boards checked*, ${t.items} items, ${t.issueItems} with at least one issue.`;\nif (t.failed) overview += `\\n:warning: ${t.failed} board${t.failed === 1 ? '' : 's'} could not be checked, see below.`;\nif (logProblem) overview += `\\n:warning: ${esc(logProblem)}`;\n\n// Slack rejects the whole message if one section is over 3,000 characters, for example a long list of log errors\nconst fit = s => (s.length > 3000 ? s.slice(0, 2985) + ' (shortened)' : s);\nconst boardBlocks = a.boards.map(b => ({ type: 'section', text: { type: 'mrkdwn', text: fit(boardText(b)) } }));\nlet blocks = [\n  { type: 'header', text: { type: 'plain_text', text: `CRM health report, ${a.snapshotDate}` } },\n  { type: 'section', text: { type: 'mrkdwn', text: fit(overview) } },\n  ...boardBlocks.flatMap(block => [{ type: 'divider' }, block]),\n  { type: 'context', elements: [{ type: 'mrkdwn', text: [legend, logNote, `Run by ${a.trigger}.`].filter(Boolean).join(' ') }] },\n];\nconst scoreText = b => (b.status === 'ok' ? `${b.score}/100` : b.status === 'empty' ? 'empty' : 'not checked');\nif (blocks.length > 50) blocks = blocks.filter(block => block.type !== 'divider');  // Slack allows 50 blocks\nif (blocks.length > 50) {\n  // Header, overview, 46 boards, this note and the footer make 50. The boards left out are still named with their score\n  const left = a.boards.slice(46);\n  const note = `${left.length} more boards are not shown here, because Slack allows 50 blocks in one message: `\n    + left.map(b => `${esc(b.name)} ${scoreText(b)}`).join(', ') + '.' + (cfg.emailTo.length ? ' The email report has every board.' : '');\n  blocks = [...blocks.slice(0, 48), { type: 'section', text: { type: 'mrkdwn', text: fit(note) } }, blocks[blocks.length - 1]];\n}\n// The top level text is the notification and fallback text; Slack reads it as mrkdwn too, so it is escaped as well\nconst fallback = `CRM health report ${a.snapshotDate}: ` + a.boards.map(b => `${esc(b.name)} ${scoreText(b)}`).join(', ');\n\n// ---------- Email ----------\nconst scored = a.boards.filter(b => b.status === 'ok').slice().sort((x, y) => x.score - y.score);\nconst subject = `CRM health report ${a.snapshotDate}: `\n  + (scored.length ? `lowest score ${scored[0].score}/100 (${scored[0].name})` : 'no items to score')\n  + (t.failed ? `, ${t.failed} board${t.failed === 1 ? '' : 's'} not checked` : '');\nconst cell = (b, key, check) => (b.checks[check] ? String(b.counts[key]) : 'n/a');\nconst td = 'style=\"padding:6px 8px;border-top:1px solid #d9e2ec\"';\nconst rows = a.boards.map(b => {\n  const name = `<td ${td}>${htmlLink(b.url, b.name)}</td>`;\n  if (b.status === 'failed') return `<tr>${name}<td ${td} colspan=\"8\">Could not be checked: ${html(b.error)}</td></tr>`;\n  if (b.status === 'empty') return `<tr>${name}<td ${td} colspan=\"8\">Empty board, nothing to check</td></tr>`;\n  return `<tr>${name}<td ${td}><b>${b.score}</b> ${html(b.grade)}</td><td ${td}>${b.counts.items}</td><td ${td}>${b.counts.issueItems}</td>`\n    + `<td ${td}>${cell(b, 'duplicates', 'duplicates')}</td><td ${td}>${cell(b, 'missingRequired', 'missing')}</td><td ${td}>${b.counts.stale}</td>`\n    + `<td ${td}>${cell(b, 'noOwner', 'owner')}</td><td ${td}>${cell(b, 'invalid', 'format')}</td></tr>`;\n}).join('\\n');\nconst th = h => `<th style=\"padding:6px 8px;text-align:left\">${h}</th>`;\nconst worstLists = a.boards.filter(b => b.status === 'ok' && b.offenders.length).map(b =>\n  `<h3 style=\"margin:22px 0 6px;font-size:15px\">${html(b.name)}: worst items</h3>\\n<ol style=\"margin:0;padding-left:20px\">\\n`\n  + b.offenders.map(o => `<li style=\"margin:3px 0\">${htmlLink(o.url, o.name)}: ${html(o.issues.join(', '))}</li>`).join('\\n') + '\\n</ol>').join('\\n');\nconst emailHtml = `<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2933;max-width:780px\">\n<h2 style=\"margin:0 0 4px\">CRM health report, ${html(a.snapshotDate)}</h2>\n<p style=\"margin:0 0 16px;color:#52606d\">${t.checked} of ${t.boards} boards checked, ${t.items} items, ${t.issueItems} with at least one issue.</p>\n${logProblem ? `<p style=\"margin:0 0 16px;color:#b42318\"><b>${html(logProblem)}</b></p>\\n` : ''}<table cellspacing=\"0\" style=\"border-collapse:collapse;width:100%;font-size:13px\">\n<tr style=\"background:#f0f4f8\">${['Board', 'Score', 'Items', 'With issues', 'Duplicates', 'Missing fields', 'Stale', 'No owner', 'Invalid'].map(th).join('')}</tr>\n${rows}\n</table>\n${worstLists}\n<p style=\"margin:24px 0 0;color:#7b8794;font-size:12px\">${html([legend, logNote, `Run by ${a.trigger}.`].filter(Boolean).join(' '))}</p>\n</div>`;\nconst emailText = [`CRM health report, ${a.snapshotDate}`, `${t.checked} of ${t.boards} boards checked, ${t.items} items, ${t.issueItems} with at least one issue.`,\n  ...(logProblem ? [logProblem] : []), '',\n  ...a.boards.flatMap(b => {\n    if (b.status === 'failed') return [`${b.name}: could not be checked. ${b.error}`, ''];\n    if (b.status === 'empty') return [`${b.name}: empty board, nothing to check.`, ''];\n    return [`${b.name}: score ${b.score}/100 (${b.grade}). ${b.counts.items} items, ` + (b.counts.issueItems ? `${b.counts.issueItems} with issues: ${b.summary.join(', ')}.` : 'no issues found.'),\n      ...b.offenders.map(o => `  ${o.name}: ${o.issues.join(', ')} (${o.url})`), ''];\n  }),\n  [legend, logNote].filter(Boolean).join(' ')].join('\\n');\n\nreturn [{\n  json: {\n    snapshotDate: a.snapshotDate,\n    log,\n    sendSlack: cfg.slack,\n    sendEmail: cfg.emailTo.length > 0,\n    slack: { text: fallback, blocks },\n    email: { to: cfg.emailTo, subject, html: emailHtml, text: emailText },\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "ba71fb15-015b-5324-9482-276b60136d64",
+      "name": "Slack Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        1060
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "34c91f0c-4163-50d6-b042-b854872665ff",
+              "leftValue": "={{ $json.sendSlack }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "04f02a03-2017-5d3f-8bfb-ec9e9fc63dac",
+      "name": "Slack: Post Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        920
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Build Report').first().json.slack) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "9e716845-f675-5052-85ff-13cd2fdf87ef",
+      "name": "Email Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2140,
+        1060
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "65fe6e9d-3a0c-50db-8fa5-2d17ac4a8b94",
+              "leftValue": "={{ $('Build Report').first().json.sendEmail }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0c786a5e-6557-5351-a2ed-41de47ad59d5",
+      "name": "Email: Send Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        920
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.RESEND_API_KEY }}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'crm-health-report/' + $workflow.id + '/' + $('Build Report').first().json.snapshotDate + '/' + $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ from: $env.REPORT_EMAIL_FROM }, $('Build Report').first().json.email)) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "990bf4a9-2445-524c-b85a-5190a706715b",
+      "name": "Finish Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2580,
+        1060
+      ],
+      "parameters": {
+        "jsCode": "// The report is out. If anything went wrong along the way, list it so the run ends as failed\n// and the error workflow sends the alert. A failed request shows up on the HTTP node's error output (output 2).\nconst a = $('Analyze Boards').first().json;\nconst report = $('Build Report').first().json;\nconst problems = [];\n// n8n words a failed request as '500 - \"<body as JSON text>\"'; turn that into \"HTTP 500: <message>\"\nconst readable = e => {\n  const m = /^(\\d{3}) - ([\\s\\S]*)$/.exec((e && e.message) || '');\n  if (!m) return (e && e.message) || 'request failed';\n  let body = m[2];\n  for (let i = 0; i < 2 && typeof body === 'string'; i++) { try { body = JSON.parse(body); } catch (x) { break; } }\n  const msg = typeof body === 'string' ? body : (body && ((body.errors && body.errors[0] && body.errors[0].message) || body.message || body.error)) || '';\n  return `HTTP ${m[1]}${msg ? ': ' + String(msg).slice(0, 200) : ''}`;\n};\n\nconst failed = a.boards.filter(b => b.status === 'failed');\nif (failed.length) problems.push(`${failed.length} board(s) could not be checked: ${failed.map(b => `${b.name} (${b.error})`).join('; ')}`);\nif (['failed', 'partial'].includes(report.log.status)) problems.push(`Health log not fully saved: ${report.log.error}`);\nfor (const [node, label] of [['Slack: Post Report', 'Slack'], ['Email: Send Report', 'Email']]) {\n  const sent = $(node);\n  if (!sent.isExecuted) continue;\n  const errorItems = sent.all(1);\n  if (errorItems.length) problems.push(`${label} did not accept the report (${readable(errorItems[0].json.error)})`);\n}\n\nreturn [{ json: { ok: problems.length === 0, problems, message: `CRM health report ${a.snapshotDate} finished with problems: ${problems.join('. ')}` } }];\n"
+      }
+    },
+    {
+      "id": "8ea6b2fd-59c7-5275-9acd-701e5d678d69",
+      "name": "Any Problems?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        1060
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "38d8d2ed-a86a-5ee9-b548-0d1d531d146c",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0279b6c7-ab04-524a-bdc1-847606a955e6",
+      "name": "Stop: Report Problems",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        3020,
+        960
+      ],
+      "parameters": {
+        "errorMessage": "={{ $json.message }}"
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Load Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Now": {
+      "main": [
+        [
+          {
+            "node": "Run Now Authorized?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Now Authorized?": {
+      "main": [
+        [
+          {
+            "node": "Load Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond: Unauthorized": {
+      "main": [
+        [
+          {
+            "node": "Stop: Bad Run Now Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Config": {
+      "main": [
+        [
+          {
+            "node": "Config Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config Valid?": {
+      "main": [
+        [
+          {
+            "node": "Respond: Started",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Page Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: Bad Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Bad Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond: Started": {
+      "main": [
+        [
+          {
+            "node": "Build Page Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond: Bad Config": {
+      "main": [
+        [
+          {
+            "node": "Stop: Bad Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Page Request": {
+      "main": [
+        [
+          {
+            "node": "Monday: Fetch Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday: Fetch Page": {
+      "main": [
+        [
+          {
+            "node": "Check Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: Monday Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Page": {
+      "main": [
+        [
+          {
+            "node": "Next Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next Step": {
+      "main": [
+        [
+          {
+            "node": "Build Page Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait: Back Off",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analyze Boards",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: Monday Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait: Back Off": {
+      "main": [
+        [
+          {
+            "node": "Build Page Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Boards": {
+      "main": [
+        [
+          {
+            "node": "Log Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Monday: Find Log Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday: Find Log Rows": {
+      "main": [
+        [
+          {
+            "node": "Plan Log Writes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Log Writes": {
+      "main": [
+        [
+          {
+            "node": "Ready To Save?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready To Save?": {
+      "main": [
+        [
+          {
+            "node": "Monday: Save Log Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday: Save Log Rows": {
+      "main": [
+        [
+          {
+            "node": "Check Log Writes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Log Writes": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Slack Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Slack: Post Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Post Report": {
+      "main": [
+        [
+          {
+            "node": "Email Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Email: Send Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email: Send Report": {
+      "main": [
+        [
+          {
+            "node": "Finish Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish Run": {
+      "main": [
+        [
+          {
+            "node": "Any Problems?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Problems?": {
+      "main": [
+        [
+          {
+            "node": "Stop: Report Problems",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
